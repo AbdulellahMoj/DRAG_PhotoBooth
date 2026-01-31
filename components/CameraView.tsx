@@ -95,20 +95,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         }
       });
 
+      // Store latest detection results without blocking
+      const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false });
+
       faceMesh.onResults((results: any) => {
         if (isDestroying.current) return;
-        const canvasCtx = canvasRef.current?.getContext('2d');
-        if (!canvasCtx || !canvasRef.current || !videoRef.current) return;
-
-        const width = canvasRef.current.width;
-        const height = canvasRef.current.height;
-
-        canvasCtx.save();
-        canvasCtx.filter = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
-        canvasCtx.translate(width, 0);
-        canvasCtx.scale(-1, 1);
-        canvasCtx.drawImage(videoRef.current, 0, 0, width, height);
-        canvasCtx.restore();
 
         let someoneSmiling = false;
         if (results.multiFaceLandmarks) {
@@ -119,6 +110,46 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
             const smileVal = Math.min(100, Math.max(0, ((ratio - 0.42) / 0.16) * 100));
             
             if (smileVal > 35) someoneSmiling = true;
+          }
+        }
+
+        // Store detections for rendering later
+        latestDetections.current = {
+          faceLandmarks: results.multiFaceLandmarks,
+          smiling: someoneSmiling
+        };
+        allSmiling.current = someoneSmiling;
+      });
+
+      // Render loop: Always render camera feed at full FPS
+      const renderFrame = () => {
+        if (isDestroying.current) return;
+        
+        const canvasCtx = canvasRef.current?.getContext('2d');
+        if (!canvasCtx || !canvasRef.current || !videoRef.current) {
+          requestAnimationFrame(renderFrame);
+          return;
+        }
+
+        const width = canvasRef.current.width;
+        const height = canvasRef.current.height;
+
+        // Draw camera feed (always at 30fps)
+        canvasCtx.save();
+        canvasCtx.filter = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
+        canvasCtx.translate(width, 0);
+        canvasCtx.scale(-1, 1);
+        canvasCtx.drawImage(videoRef.current, 0, 0, width, height);
+        canvasCtx.restore();
+
+        // Overlay latest detections (updated at ~5fps by MediaPipe)
+        const { faceLandmarks, smiling } = latestDetections.current;
+        if (faceLandmarks) {
+          for (const landmarks of faceLandmarks) {
+            const mouthWidth = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
+            const faceWidth = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
+            const ratio = mouthWidth / (faceWidth || 1);
+            const smileVal = Math.min(100, Math.max(0, ((ratio - 0.42) / 0.16) * 100));
 
             const xs = landmarks.map((l: any) => (1 - l.x) * width);
             const ys = landmarks.map((l: any) => l.y * height);
@@ -129,16 +160,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
               canvasCtx.translate(width, 0);
               canvasCtx.scale(-1, 1);
               canvasCtx.shadowBlur = 10;
-              canvasCtx.shadowColor = someoneSmiling ? '#39ff14' : '#bc6ff1';
+              canvasCtx.shadowColor = smiling ? '#39ff14' : '#bc6ff1';
               drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {
-                color: someoneSmiling ? '#39ff14' : '#bc6ff1', 
+                color: smiling ? '#39ff14' : '#bc6ff1', 
                 lineWidth: 0.6,
                 alpha: 0.6
               });
               canvasCtx.restore();
             }
 
-            canvasCtx.strokeStyle = someoneSmiling ? "#39ff14" : "#bc6ff1";
+            canvasCtx.strokeStyle = smiling ? "#39ff14" : "#bc6ff1";
             canvasCtx.lineWidth = 2;
             const cLen = 20;
             const off = 30;
@@ -157,19 +188,25 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
             canvasCtx.fillStyle = "rgba(0,0,0,0.6)";
             canvasCtx.fillRect(minX - off, minY - off - 25, 120, 18);
-            canvasCtx.fillStyle = someoneSmiling ? "#39ff14" : "#bc6ff1";
+            canvasCtx.fillStyle = smiling ? "#39ff14" : "#bc6ff1";
             canvasCtx.font = "bold 9px 'Orbitron'";
             canvasCtx.fillText(`BIO: ${Math.round(smileVal)}%`, minX - off + 8, minY - off - 12);
           }
         }
-        allSmiling.current = someoneSmiling;
-      });
+        
+        // Continue rendering at next frame
+        requestAnimationFrame(renderFrame);
+      };
+
+      // Start the render loop
+      requestAnimationFrame(renderFrame);
 
       const camera = new Camera(videoRef.current, {
         onFrame: async () => {
+          // Send frames to MediaPipe asynchronously (don't block/await)
           if (videoRef.current && !isLocked && !isDestroying.current) {
-            await hands.send({ image: videoRef.current });
-            await faceMesh.send({ image: videoRef.current });
+            hands.send({ image: videoRef.current }); // No await!
+            faceMesh.send({ image: videoRef.current }); // No await!
           }
         },
         width: 1280, height: 720
