@@ -1,0 +1,8 @@
+
+{
+  "name": "DRAG Booth Station",
+  "description": "High-throughput robotic booth photo station with gesture-based biometric logic and cloud uplink.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

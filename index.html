@@ -1,0 +1,97 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DRAG_BOOTH | INTERFACE</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --primary: #bc6ff1;
+      --secondary: #39ff14;
+      --accent: #00f2ff;
+      --bg-dark: #020005;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: #e0aaff;
+      font-family: 'JetBrains Mono', monospace;
+      margin: 0;
+      overflow: hidden;
+    }
+    
+    .vignette-light {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.4) 100%);
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .cyber-clip-main {
+      clip-path: polygon(
+        0% 15px, 15px 0%, 
+        calc(100% - 15px) 0%, 100% 15px, 
+        100% calc(100% - 15px), calc(100% - 15px) 100%, 
+        15px 100%, 0% calc(100% - 15px)
+      );
+    }
+
+    .neon-border {
+      border: 1px solid rgba(188, 111, 241, 0.4);
+      box-shadow: 0 0 20px rgba(188, 111, 241, 0.2), inset 0 0 15px rgba(188, 111, 241, 0.1);
+    }
+
+    .scan-overlay {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(rgba(188, 111, 241, 0) 50%, rgba(188, 111, 241, 0.02) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 60;
+      opacity: 0.3;
+    }
+
+    @keyframes glitch-border {
+      0% { border-color: var(--primary); }
+      50% { border-color: var(--accent); }
+      100% { border-color: var(--primary); }
+    }
+
+    .border-glitch {
+      animation: glitch-border 4s infinite;
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+    ::-webkit-scrollbar-thumb { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <div class="vignette-light"></div>
+  <div class="scan-overlay"></div>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
