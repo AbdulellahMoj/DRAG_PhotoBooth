@@ -62,7 +62,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCapture = async (url: string) => {
+  const handleCapture = async (url: string, _confidence?: number) => {
     const id = `NODE_${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`;
     addLog(`MATCH_DETECTED: ${id}`);
     

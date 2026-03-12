@@ -26,6 +26,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   const modelsReady = useRef(false);
   const isDestroying = useRef(false);
   const cameraInstance = useRef<any>(null);
+  const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false });
 
   const REQUIRED_HOLD_MS = 1400; 
   const COOLDOWN_SECONDS = 3;
@@ -95,8 +96,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         }
       });
 
-      // Store latest detection results without blocking
-      const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false });
+      // latestDetections is declared at component level to satisfy React Rules of Hooks
 
       faceMesh.onResults((results: any) => {
         if (isDestroying.current) return;
