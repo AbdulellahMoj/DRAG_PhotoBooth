@@ -4,8 +4,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 // Module-level constants — declared outside the component so they are never
 // reallocated on re-render and are not part of any closure capture.
 const CANVAS_FILTER = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
-const CANVAS_W = 640;
-const CANVAS_H = 360;
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
 
 interface CameraViewProps {
   onCapture: (url: string, confidence: number) => void;
