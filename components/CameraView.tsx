@@ -38,6 +38,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   // FIX P1: Mirror of isLocked as a ref so onFrame (a one-time closure inside startCamera)
   //         always reads the current lock state. React state alone is stale in that closure.
   const isLockedRef = useRef(false);
+  const handsInFlightRef = useRef(false);
+  const faceInFlightRef = useRef(false);
+  const lastResultAtRef = useRef<number>(Date.now());
+  const lastHealthLogAtRef = useRef<number>(0);
 
   const REQUIRED_HOLD_MS = 1400; 
   const COOLDOWN_SECONDS = 3;
@@ -89,15 +93,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
       // FIX 8: modelComplexity 0 is sufficient for a 2-finger gesture check and runs ~40% faster
-      hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.8, modelComplexity: 0 });
+      hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.5, modelComplexity: 0 });
 
       const faceMesh = new FaceMesh({
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
       });
-      faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.65 });
+      faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.5 });
 
       hands.onResults((results: any) => {
         if (isDestroying.current) return;
+        lastResultAtRef.current = Date.now();
         peaceSignActive.current = false;
         if (results.multiHandLandmarks?.length > 0) {
           const landmarks = results.multiHandLandmarks[0];
@@ -115,6 +120,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
       faceMesh.onResults((results: any) => {
         if (isDestroying.current) return;
+        lastResultAtRef.current = Date.now();
 
         // Single pass: compute smileVal, set someoneSmiling, and cache for the render loop.
         // Previously the smile math ran twice (once to detect, once to cache) — merged here.
@@ -238,8 +244,36 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           if (!videoRef.current || isLockedRef.current || isDestroying.current) return;
           frameCountRef.current++;
           if (frameCountRef.current % 2 !== 0) return;
-          hands.send({ image: videoRef.current });
-          faceMesh.send({ image: videoRef.current });
+
+          const now = Date.now();
+          if (now - lastResultAtRef.current > 5000 && now - lastHealthLogAtRef.current > 5000) {
+            lastHealthLogAtRef.current = now;
+            onLog("WARN: NO_ML_RESULTS_5S");
+          }
+
+          const frameImage = videoRef.current;
+
+          if (!handsInFlightRef.current) {
+            handsInFlightRef.current = true;
+            hands.send({ image: frameImage })
+              .catch((err: any) => {
+                console.error("Hands send error:", err);
+              })
+              .finally(() => {
+                handsInFlightRef.current = false;
+              });
+          }
+
+          if (!faceInFlightRef.current) {
+            faceInFlightRef.current = true;
+            faceMesh.send({ image: frameImage })
+              .catch((err: any) => {
+                console.error("FaceMesh send error:", err);
+              })
+              .finally(() => {
+                faceInFlightRef.current = false;
+              });
+          }
         },
         width: CANVAS_W, height: CANVAS_H
       });
