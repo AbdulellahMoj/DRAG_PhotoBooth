@@ -1,3 +1,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* CameraView keyframe animations — defined here once at the stylesheet level
+   instead of being injected via an inline <style> tag on every React render. */
+@keyframes scan-line {
+  0%   { top: -15%; opacity: 0; }
+  10%  { opacity: 0.8; }
+  90%  { opacity: 0.8; }
+  100% { top: 115%; opacity: 0; }
+}
+@keyframes flash {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes gesture-pulse {
+  0%   { box-shadow: 0 0 5px #bc6ff1; }
+  50%  { box-shadow: 0 0 20px #bc6ff1; }
+  100% { box-shadow: 0 0 5px #bc6ff1; }
+}
+@keyframes ping-slow {
+  0%   { transform: scale(1) rotate(45deg); opacity: 1; }
+  100% { transform: scale(3) rotate(45deg); opacity: 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-scan-line     { animation: scan-line 2.8s linear infinite; }
+.animate-gesture-pulse { animation: gesture-pulse 1s infinite; }
+.animate-ping-slow     { animation: ping-slow 2s infinite ease-out; }
+.animate-fade-in       { animation: fade-in 0.3s ease-out forwards; }

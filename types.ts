@@ -10,8 +10,3 @@ export interface CapturedPhoto {
     resolution: string;
   };
 }
-
-export interface RecognitionResult {
-  peaceSignDetected: boolean;
-  confidence: number;
-}

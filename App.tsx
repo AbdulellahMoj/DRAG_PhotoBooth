@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import CameraView from './components/CameraView';
 import { CapturedPhoto } from './types';
 
@@ -12,11 +12,12 @@ const App: React.FC = () => {
     photos.find(p => p.id === selectedPhotoId) || (photos.length > 0 ? photos[0] : null)
   , [photos, selectedPhotoId]);
 
-  const addLog = (msg: string) => {
+  // useCallback — prevents stale onLog closure inside CameraView's MediaPipe setup effect
+  const addLog = useCallback((msg: string) => {
     setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10));
-  };
+  }, []);
 
-  const uploadToShare = async (id: string, base64: string) => {
+  const uploadToShare = useCallback(async (id: string, base64: string) => {
     addLog(`INIT_UPLINK_${id}`);
     try {
       const base64Data = base64.split(',')[1];
@@ -60,9 +61,10 @@ const App: React.FC = () => {
       ));
       addLog(`ERROR: UPLINK_FAULT_${id}`);
     }
-  };
+  }, [addLog]);
 
-  const handleCapture = async (url: string, _confidence?: number) => {
+  // useCallback — stable reference passed to CameraView as onCapture prop
+  const handleCapture = useCallback(async (url: string, _confidence?: number) => {
     const id = `NODE_${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`;
     addLog(`MATCH_DETECTED: ${id}`);
     
@@ -77,7 +79,7 @@ const App: React.FC = () => {
     setPhotos(prev => [newPhoto, ...prev]);
     setSelectedPhotoId(id);
     uploadToShare(id, url);
-  };
+  }, [uploadToShare]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#010005] text-[#bc6ff1] font-mono overflow-hidden relative">

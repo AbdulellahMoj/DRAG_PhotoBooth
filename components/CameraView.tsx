@@ -1,5 +1,11 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+
+// Module-level constants — declared outside the component so they are never
+// reallocated on re-render and are not part of any closure capture.
+const CANVAS_FILTER = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
 
 interface CameraViewProps {
   onCapture: (url: string, confidence: number) => void;
@@ -27,12 +33,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   const isDestroying = useRef(false);
   const cameraInstance = useRef<any>(null);
   const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false, smileVal: 0 });
-  // FIX 6: Cached canvas context — avoids getContext('2d') call every animation frame
   const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
-  // FIX 2: Frame counter to throttle ML model sends — prevents event-loop queue backup
   const frameCountRef = useRef(0);
-  // FIX 3: Pre-built filter string constant — avoids string allocation every RAF
-  const CANVAS_FILTER = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
+  // FIX P1: Mirror of isLocked as a ref so onFrame (a one-time closure inside startCamera)
+  //         always reads the current lock state. React state alone is stale in that closure.
+  const isLockedRef = useRef(false);
 
   const REQUIRED_HOLD_MS = 1400; 
   const COOLDOWN_SECONDS = 3;
@@ -44,13 +49,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         setCooldown(prev => prev - 1);
       }, 1000);
     } else if (cooldown === 0 && isLocked) {
+      isLockedRef.current = false; // sync ref alongside state
       setIsLocked(false);
       setStatus("MONITORING");
     }
     return () => clearInterval(timer);
   }, [cooldown, isLocked]);
 
-  const handleTrigger = () => {
+  // useCallback so the decision-loop effect can safely list this as a dependency.
+  const handleTrigger = useCallback(() => {
+    isLockedRef.current = true; // sync ref immediately for onFrame
     setIsLocked(true);
     setCooldown(COOLDOWN_SECONDS);
     setStatus("ARCHIVE_COMMITTED");
@@ -59,7 +67,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         onCapture(canvasRef.current!.toDataURL('image/png'), 1.0);
       }, 50);
     }
-  };
+  }, [onCapture]);
 
   const startCamera = async () => {
     setHasError(null);
@@ -144,10 +152,15 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           return;
         }
 
-        const width = canvasRef.current.width;
-        const height = canvasRef.current.height;
+        // P3 FIX: Use module-level constants instead of DOM property reads every frame.
+        const width = CANVAS_W;
+        const height = CANVAS_H;
 
-        // FIX 3: Use pre-built filter constant — no string allocation per frame
+        // Reset shadow state once per frame before drawing anything.
+        // (P4): Doing it here — outside any save/restore — means it's in effect for
+        // the whole frame without needing to set it again inside the mesh block.
+        canvasCtx.shadowBlur = 0;
+
         canvasCtx.save();
         canvasCtx.filter = CANVAS_FILTER;
         canvasCtx.translate(width, 0);
@@ -177,31 +190,28 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
               canvasCtx.save();
               canvasCtx.translate(width, 0);
               canvasCtx.scale(-1, 1);
-              // FIX 1: shadowBlur removed — it applies an expensive Gaussian blur to every
-              //         one of ~1300 line segments per frame (the #1 CPU bottleneck)
-              canvasCtx.shadowBlur = 0;
               drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {
-                color: smiling ? '#39ff14' : '#bc6ff1', 
+                color: smiling ? '#39ff14' : '#bc6ff1',
                 lineWidth: 0.6,
                 alpha: 0.6
               });
               canvasCtx.restore();
             }
 
+            // P2 FIX: All 4 corner brackets batched into one path — 3 fewer canvas
+            //         state flushes (stroke() calls) per face per frame.
             canvasCtx.strokeStyle = smiling ? "#39ff14" : "#bc6ff1";
             canvasCtx.lineWidth = 2;
             const cLen = 20;
             const off = 30;
             canvasCtx.beginPath();
+            // top-left
             canvasCtx.moveTo(minX - off, minY - off + cLen); canvasCtx.lineTo(minX - off, minY - off); canvasCtx.lineTo(minX - off + cLen, minY - off);
-            canvasCtx.stroke();
-            canvasCtx.beginPath();
+            // top-right
             canvasCtx.moveTo(maxX + off - cLen, minY - off); canvasCtx.lineTo(maxX + off, minY - off); canvasCtx.lineTo(maxX + off, minY - off + cLen);
-            canvasCtx.stroke();
-            canvasCtx.beginPath();
+            // bottom-left
             canvasCtx.moveTo(minX - off, maxY + off - cLen); canvasCtx.lineTo(minX - off, maxY + off); canvasCtx.lineTo(minX - off + cLen, maxY + off);
-            canvasCtx.stroke();
-            canvasCtx.beginPath();
+            // bottom-right
             canvasCtx.moveTo(maxX + off - cLen, maxY + off); canvasCtx.lineTo(maxX + off, maxY + off); canvasCtx.lineTo(maxX + off, maxY + off - cLen);
             canvasCtx.stroke();
 
@@ -222,16 +232,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
       const camera = new Camera(videoRef.current, {
         onFrame: async () => {
-          if (!videoRef.current || isLocked || isDestroying.current) return;
-          // FIX 2: Throttle ML sends to every other camera frame.
-          // Camera fires at ~30fps; FaceMesh processes at ~10-15fps on laptops.
-          // Without throttling, the WASM task queue backs up and stalls the event loop.
+          // P1 FIX: use isLockedRef (a ref) instead of isLocked (React state).
+          // isLocked inside this closure is the value from when startCamera() ran
+          // and never updates — it is always false. isLockedRef.current is current.
+          if (!videoRef.current || isLockedRef.current || isDestroying.current) return;
           frameCountRef.current++;
           if (frameCountRef.current % 2 !== 0) return;
           hands.send({ image: videoRef.current });
           faceMesh.send({ image: videoRef.current });
         },
-        width: 1280, height: 720
+        width: CANVAS_W, height: CANVAS_H
       });
       
       await camera.start().catch((err: any) => {
@@ -316,7 +326,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
     }, 40);
 
     return () => clearInterval(loop);
-  }, [isLocked, hasError]);
+  // P6: handleTrigger is now stable (useCallback), so correctly listed as a dep here.
+  }, [isLocked, hasError, handleTrigger]);
 
   return (
     <div className="relative w-full h-full bg-black overflow-hidden cyber-clip-main neon-border">
@@ -413,35 +424,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         </div>
       )}
       
-      <style>{`
-        @keyframes scan-line { 
-          0% { top: -15%; opacity: 0; } 
-          10% { opacity: 0.8; }
-          90% { opacity: 0.8; }
-          100% { top: 115%; opacity: 0; } 
-        }
-        @keyframes flash {
-          0% { opacity: 1; }
-          100% { opacity: 0; }
-        }
-        @keyframes gesture-pulse {
-          0% { box-shadow: 0 0 5px #bc6ff1; }
-          50% { box-shadow: 0 0 20px #bc6ff1; }
-          100% { box-shadow: 0 0 5px #bc6ff1; }
-        }
-        @keyframes ping-slow {
-          0% { transform: scale(1) rotate(45deg); opacity: 1; }
-          100% { transform: scale(3) rotate(45deg); opacity: 0; }
-        }
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateX(-10px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        .animate-scan-line { animation: scan-line 2.8s linear infinite; }
-        .animate-gesture-pulse { animation: gesture-pulse 1s infinite; }
-        .animate-ping-slow { animation: ping-slow 2s infinite ease-out; }
-        .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
-      `}</style>
+      {/* Keyframe animations moved to index.css — no longer injected per render */}
     </div>
   );
 };
