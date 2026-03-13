@@ -268,7 +268,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           // P1 FIX: use isLockedRef (a ref) instead of isLocked (React state).
           // isLocked inside this closure is the value from when startCamera() ran
           // and never updates — it is always false. isLockedRef.current is current.
-          if (!videoRef.current || isLockedRef.current || isDestroying.current) return;
+          if (!videoRef.current || isLockedRef.current || isDestroying.current || !modelsReady.current) return;
           frameCountRef.current++;
           if (frameCountRef.current % 2 !== 0) return;
 
@@ -288,12 +288,21 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
               lastHealthLogAtRef.current = now;
               onLog(`ERROR: ML_SEND_FAIL_${err?.message || "UNKNOWN"}`);
             }
+            if ((err?.message || '').toLowerCase().includes('deleted object')) {
+              isDestroying.current = true;
+              void cleanupPipeline();
+              setHasError("MODEL_CONTEXT_LOST");
+              setErrorDetails("MEDIA PIPELINE CONTEXT WAS LOST. PLEASE CLICK RETRY_INITIALIZATION.");
+              setStatus("PIPELINE_FAULT");
+            }
           }
         },
         width: CANVAS_W, height: CANVAS_H
       });
-      
-      await camera.start().catch((err: any) => {
+
+      try {
+        await camera.start();
+      } catch (err: any) {
         console.error("Camera diagnostic failed:", err);
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError' || err.message?.toLowerCase().includes('denied')) {
            setHasError("PERMISSION_DENIED");
@@ -311,7 +320,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
            setStatus("HARDWARE_FAULT");
            onLog("CRITICAL_INIT_FAULT: CONTACT_ADMIN");
         }
-      });
+        return;
+      }
 
       cameraInstance.current = camera;
       modelsReady.current = true;
