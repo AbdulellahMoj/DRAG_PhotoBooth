@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "local": "powershell -ExecutionPolicy Bypass -File ./run-local.ps1",
+    "monitor:show": "powershell -NoProfile -Command \"if (Test-Path ./logs/system-monitor.log) { Get-Content ./logs/system-monitor.log -Tail 60 } else { Write-Host 'No log file yet. Start with npm run local.' }\"",
+    "monitor:tail": "powershell -NoProfile -Command \"if (Test-Path ./logs/system-monitor.log) { Get-Content ./logs/system-monitor.log -Wait } else { Write-Host 'No log file yet. Start with npm run local.' }\"",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

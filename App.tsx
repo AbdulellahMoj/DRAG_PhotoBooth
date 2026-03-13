@@ -12,10 +12,27 @@ const App: React.FC = () => {
     photos.find(p => p.id === selectedPhotoId) || (photos.length > 0 ? photos[0] : null)
   , [photos, selectedPhotoId]);
 
+  const writeMonitorLog = useCallback((message: string) => {
+    if (!import.meta.env.DEV) return;
+
+    void fetch('/__monitor-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        message,
+      }),
+      keepalive: true,
+    }).catch(() => {
+      // Silent fail: monitor logging should never break the UI.
+    });
+  }, []);
+
   // useCallback — prevents stale onLog closure inside CameraView's MediaPipe setup effect
   const addLog = useCallback((msg: string) => {
+    writeMonitorLog(msg);
     setLog(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev].slice(0, 10));
-  }, []);
+  }, [writeMonitorLog]);
 
   const uploadToShare = useCallback(async (id: string, base64: string) => {
     addLog(`INIT_UPLINK_${id}`);
