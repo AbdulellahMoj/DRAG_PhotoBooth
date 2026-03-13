@@ -22,20 +22,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   const [hasError, setHasError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string>("");
   
-  // States for visual feedback synchronization
-  const [isPeaceActive, setIsPeaceActive] = useState(false);
-  const [isBioActive, setIsBioActive] = useState(false);
+  const [isGroupBioActive, setIsGroupBioActive] = useState(false);
   
-  const peaceSignActive = useRef(false);
   const allSmiling = useRef(false);
   const holdStartTime = useRef<number | null>(null);
   const modelsReady = useRef(false);
   const isDestroying = useRef(false);
   const cameraInstance = useRef<any>(null);
-  const handsInstanceRef = useRef<any>(null);
   const faceMeshInstanceRef = useRef<any>(null);
   const renderFrameIdRef = useRef<number | null>(null);
-  const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false, smileVal: 0 });
+  const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false });
   const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const frameCountRef = useRef(0);
   // FIX P1: Mirror of isLocked as a ref so onFrame (a one-time closure inside startCamera)
@@ -73,25 +69,17 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       }
       cameraInstance.current = null;
     }
-    if (handsInstanceRef.current?.close) {
-      try {
-        await handsInstanceRef.current.close();
-      } catch {
-      }
-    }
     if (faceMeshInstanceRef.current?.close) {
       try {
         await faceMeshInstanceRef.current.close();
       } catch {
       }
     }
-    handsInstanceRef.current = null;
     faceMeshInstanceRef.current = null;
-    peaceSignActive.current = false;
     allSmiling.current = false;
     holdStartTime.current = null;
     frameCountRef.current = 0;
-    latestDetections.current = { faceLandmarks: null, smiling: false, smileVal: 0 };
+    latestDetections.current = { faceLandmarks: null, smiling: false };
   }, []);
 
   useEffect(() => {
@@ -132,8 +120,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
     onLog("REQUESTING_MEDIA_ACCESS...");
 
     // @ts-ignore
-    const { Hands, FaceMesh, Camera, drawConnectors, FACEMESH_TESSELATION } = window;
-    if (!Hands || !FaceMesh || !Camera) {
+    const { FaceMesh, Camera, drawConnectors, FACEMESH_TESSELATION } = window;
+    if (!FaceMesh || !Camera) {
       setHasError("MEDIAPIPE_LOAD_FAIL");
       setErrorDetails("CRITICAL_LIBRARIES_NOT_FOUND. CHECK NETWORK UPLINK.");
       setStatus("CORE_FAILURE");
@@ -149,33 +137,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
     }
 
     try {
-      const hands = new Hands({
-        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-      });
-      hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.5, modelComplexity: 0 });
-      handsInstanceRef.current = hands;
-
       const faceMesh = new FaceMesh({
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
       });
-      faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.5 });
+      faceMesh.setOptions({ maxNumFaces: 5, refineLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.5 });
       faceMeshInstanceRef.current = faceMesh;
-
-      hands.onResults((results: any) => {
-        if (isDestroying.current) return;
-        lastResultAtRef.current = Date.now();
-        peaceSignActive.current = false;
-        if (results.multiHandLandmarks?.length > 0) {
-          const landmarks = results.multiHandLandmarks[0];
-          const indexUp = landmarks[8].y < landmarks[6].y;
-          const middleUp = landmarks[12].y < landmarks[10].y;
-          const ringDown = landmarks[16].y > landmarks[14].y;
-          const pinkyDown = landmarks[20].y > landmarks[18].y;
-          if (indexUp && middleUp && ringDown && pinkyDown) {
-            peaceSignActive.current = true;
-          }
-        }
-      });
 
       // latestDetections is declared at component level to satisfy React Rules of Hooks
 
@@ -185,24 +151,24 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
         // Single pass: compute smileVal, set someoneSmiling, and cache for the render loop.
         // Previously the smile math ran twice (once to detect, once to cache) — merged here.
-        let someoneSmiling = false;
-        let cachedSmileVal = 0;
+        let smilingFaces = 0;
+        const facesDetected = results.multiFaceLandmarks?.length || 0;
         if (results.multiFaceLandmarks) {
           for (const landmarks of results.multiFaceLandmarks) {
             const mw = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
             const fw = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
             const sv = Math.min(100, Math.max(0, ((mw / (fw || 1)) - 0.42) / 0.16 * 100));
-            if (sv > 35) someoneSmiling = true;
-            cachedSmileVal = sv; // maxNumFaces:1, so this is always the only face
+            if (sv > 35) smilingFaces++;
           }
         }
 
+        const groupReady = facesDetected > 0 && smilingFaces === facesDetected;
+
         latestDetections.current = {
           faceLandmarks: results.multiFaceLandmarks,
-          smiling: someoneSmiling,
-          smileVal: cachedSmileVal
+          smiling: groupReady
         };
-        allSmiling.current = someoneSmiling;
+        allSmiling.current = groupReady;
       });
 
       const renderFrame = () => {
@@ -235,10 +201,13 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         canvasCtx.restore();
 
         // Overlay latest detections (updated async by MediaPipe)
-        const { faceLandmarks, smiling, smileVal } = latestDetections.current;
+        const { faceLandmarks, smiling } = latestDetections.current;
         if (faceLandmarks) {
           for (const landmarks of faceLandmarks) {
-            // FIX 4: smileVal is pre-computed in onResults — no duplicate math here
+            const mouthWidth = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
+            const faceWidth = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
+            const ratio = mouthWidth / (faceWidth || 1);
+            const smileVal = Math.min(100, Math.max(0, ((ratio - 0.42) / 0.16) * 100));
 
             // FIX 5: Replace Math.min(...spread) with a manual loop — avoids 468-item
             //         argument list allocation and GC pressure on every render frame
@@ -312,9 +281,6 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           const frameImage = videoRef.current;
 
           try {
-            // Serialize model execution per frame.
-            // Running Hands + FaceMesh concurrently can trigger WASM aborts with the CDN builds.
-            await hands.send({ image: frameImage });
             await faceMesh.send({ image: frameImage });
           } catch (err: any) {
             console.error("MediaPipe send error:", err);
@@ -364,7 +330,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
     isDestroying.current = false;
     const checkReady = setInterval(() => {
       // @ts-ignore
-      if (window.Hands && window.FaceMesh && window.Camera) {
+      if (window.FaceMesh && window.Camera) {
         clearInterval(checkReady);
         startCamera();
       }
@@ -383,12 +349,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
       // FIX 7: Guard all state updates against same-value writes.
       // Without this, React schedules a re-render every 40ms (25fps) even when nothing changed.
-      const peace = peaceSignActive.current;
-      const bio = allSmiling.current;
-      setIsPeaceActive(prev => prev === peace ? prev : peace);
-      setIsBioActive(prev => prev === bio ? prev : bio);
+      const groupBio = allSmiling.current;
+      setIsGroupBioActive(prev => prev === groupBio ? prev : groupBio);
 
-      if (peace && bio) {
+      if (groupBio) {
         if (holdStartTime.current === null) holdStartTime.current = Date.now();
         const elapsed = Date.now() - holdStartTime.current;
         const progress = Math.min(100, (elapsed / REQUIRED_HOLD_MS) * 100);
@@ -416,11 +380,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       <video ref={videoRef} className="hidden" autoPlay playsInline muted />
       <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} className="absolute inset-0 w-full h-full object-cover z-10" />
       
-      {/* GESTURE HUD OVERLAY (Subtle visual cue on screen) */}
-      {!hasError && !isLocked && isPeaceActive && (
+      {!hasError && !isLocked && isGroupBioActive && (
         <div className="absolute top-20 left-6 z-40 pointer-events-none animate-fade-in">
           <div className="flex flex-col gap-1 p-2 bg-purple-600/10 border-l-2 border-purple-500 backdrop-blur-sm">
-             <span className="text-[7px] font-black text-purple-400 tracking-[0.3em] uppercase animate-pulse">Gesture_Match_Detected</span>
+             <span className="text-[7px] font-black text-purple-400 tracking-[0.3em] uppercase animate-pulse">Group_Smile_Ready</span>
              <div className="flex gap-1">
                 <div className="w-1 h-1 bg-purple-500 animate-bounce" />
                 <div className="w-1 h-1 bg-purple-500 animate-bounce [animation-delay:0.1s]" />
@@ -483,20 +446,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
       {!hasError && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-2 bg-black/90 border border-purple-500/20 cyber-clip-main flex items-center gap-10 backdrop-blur-2xl z-40 shadow-2xl">
-          <div className="flex flex-col items-center gap-1 group">
-            <div className="relative">
-              <div className={`w-2.5 h-2.5 rotate-45 transition-all duration-300 ${isPeaceActive ? 'bg-purple-500 shadow-[0_0_15px_#bc6ff1] animate-gesture-pulse scale-110' : 'bg-white/5 border border-white/20'}`} />
-              {isPeaceActive && (
-                 <div className="absolute inset-0 w-full h-full rotate-45 border border-purple-400/50 animate-ping-slow pointer-events-none" />
-              )}
-            </div>
-            <span className={`text-[6px] font-black tracking-widest uppercase transition-colors ${isPeaceActive ? 'text-purple-400' : 'text-white/20'}`}>GEST_KEY</span>
+          <div className="flex flex-col items-center gap-1">
+            <div className={`w-2.5 h-2.5 rotate-45 transition-all duration-300 ${isGroupBioActive ? 'bg-green-500 shadow-[0_0_15px_#39ff14] scale-110' : 'bg-white/5 border border-white/20'}`} />
+            <span className={`text-[6px] font-black tracking-widest uppercase transition-colors ${isGroupBioActive ? 'text-green-400' : 'text-white/20'}`}>GROUP_BIO</span>
           </div>
           <div className="text-[10px] font-black tracking-[0.4em] text-white/80 italic uppercase text-center min-w-[120px]">{status}</div>
-          <div className="flex flex-col items-center gap-1">
-            <div className={`w-2.5 h-2.5 rotate-45 transition-all duration-300 ${isBioActive ? 'bg-green-500 shadow-[0_0_15px_#39ff14] scale-110' : 'bg-white/5 border border-white/20'}`} />
-            <span className={`text-[6px] font-black tracking-widest uppercase transition-colors ${isBioActive ? 'text-green-400' : 'text-white/20'}`}>BIO_KEY</span>
-          </div>
         </div>
       )}
 
