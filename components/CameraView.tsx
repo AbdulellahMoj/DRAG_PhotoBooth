@@ -108,26 +108,20 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       faceMesh.onResults((results: any) => {
         if (isDestroying.current) return;
 
+        // Single pass: compute smileVal, set someoneSmiling, and cache for the render loop.
+        // Previously the smile math ran twice (once to detect, once to cache) — merged here.
         let someoneSmiling = false;
+        let cachedSmileVal = 0;
         if (results.multiFaceLandmarks) {
           for (const landmarks of results.multiFaceLandmarks) {
-            const mouthWidth = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
-            const faceWidth = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
-            const ratio = mouthWidth / (faceWidth || 1);
-            const smileVal = Math.min(100, Math.max(0, ((ratio - 0.42) / 0.16) * 100));
-            
-            if (smileVal > 35) someoneSmiling = true;
+            const mw = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
+            const fw = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
+            const sv = Math.min(100, Math.max(0, ((mw / (fw || 1)) - 0.42) / 0.16 * 100));
+            if (sv > 35) someoneSmiling = true;
+            cachedSmileVal = sv; // maxNumFaces:1, so this is always the only face
           }
         }
 
-        // FIX 4: Compute smileVal here once and cache it — render loop reads it directly
-        let cachedSmileVal = 0;
-        if (results.multiFaceLandmarks?.length > 0) {
-          const lm = results.multiFaceLandmarks[0];
-          const mw = Math.sqrt(Math.pow(lm[291].x - lm[61].x, 2) + Math.pow(lm[291].y - lm[61].y, 2));
-          const fw = Math.sqrt(Math.pow(lm[454].x - lm[234].x, 2) + Math.pow(lm[454].y - lm[234].y, 2));
-          cachedSmileVal = Math.min(100, Math.max(0, ((mw / (fw || 1)) - 0.42) / 0.16 * 100));
-        }
         latestDetections.current = {
           faceLandmarks: results.multiFaceLandmarks,
           smiling: someoneSmiling,
