@@ -309,6 +309,11 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
            setErrorDetails("DRAG_OS REQUIRES OPTICAL SENSOR ACCESS. PLEASE CLICK 'ALLOW' IN THE BROWSER PROMPT OR CLEAR PERMISSION BLOCK IN SETTINGS.");
            setStatus("ACCESS_BLOCKED");
            onLog("CAMERA_PERMISSION_DENIED: ACTION_REQUIRED");
+        } else if (err.name === 'NotReadableError' || err.message?.toLowerCase().includes('could not start video source')) {
+          setHasError("CAMERA_BUSY");
+          setErrorDetails("CAMERA DEVICE IS CURRENTLY IN USE BY ANOTHER APP/TAB OR BLOCKED BY OS PRIVACY CONTROLS. CLOSE OTHER CAMERA APPS (ZOOM/TEAMS/BROWSER TABS), THEN RETRY INITIALIZATION.");
+          setStatus("DEVICE_LOCKED");
+          onLog("CAMERA_IN_USE: RELEASE_DEVICE");
         } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
            setHasError("HARDWARE_NOT_FOUND");
            setErrorDetails("NO COMPATIBLE CAMERA DETECTED IN THE LOCAL ARRAY. CHECK CABLES.");
