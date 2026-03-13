@@ -4,8 +4,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 // Module-level constants — declared outside the component so they are never
 // reallocated on re-render and are not part of any closure capture.
 const CANVAS_FILTER = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
+const CANVAS_W = 640;
+const CANVAS_H = 360;
 
 interface CameraViewProps {
   onCapture: (url: string, confidence: number) => void;
@@ -32,6 +32,9 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   const modelsReady = useRef(false);
   const isDestroying = useRef(false);
   const cameraInstance = useRef<any>(null);
+  const handsInstanceRef = useRef<any>(null);
+  const faceMeshInstanceRef = useRef<any>(null);
+  const renderFrameIdRef = useRef<number | null>(null);
   const latestDetections = useRef<any>({ faceLandmarks: null, smiling: false, smileVal: 0 });
   const canvasCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const frameCountRef = useRef(0);
@@ -43,6 +46,53 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
   const REQUIRED_HOLD_MS = 1400; 
   const COOLDOWN_SECONDS = 3;
+
+  const hasWebGLSupport = () => {
+    const testCanvas = document.createElement('canvas');
+    const gl =
+      testCanvas.getContext('webgl2') ||
+      testCanvas.getContext('webgl') ||
+      testCanvas.getContext('experimental-webgl');
+
+    if (!gl) return false;
+    const loseContextExt = (gl as any).getExtension?.('WEBGL_lose_context');
+    loseContextExt?.loseContext?.();
+    return true;
+  };
+
+  const cleanupPipeline = useCallback(async () => {
+    modelsReady.current = false;
+    if (renderFrameIdRef.current !== null) {
+      cancelAnimationFrame(renderFrameIdRef.current);
+      renderFrameIdRef.current = null;
+    }
+    if (cameraInstance.current) {
+      try {
+        cameraInstance.current.stop();
+      } catch {
+      }
+      cameraInstance.current = null;
+    }
+    if (handsInstanceRef.current?.close) {
+      try {
+        await handsInstanceRef.current.close();
+      } catch {
+      }
+    }
+    if (faceMeshInstanceRef.current?.close) {
+      try {
+        await faceMeshInstanceRef.current.close();
+      } catch {
+      }
+    }
+    handsInstanceRef.current = null;
+    faceMeshInstanceRef.current = null;
+    peaceSignActive.current = false;
+    allSmiling.current = false;
+    holdStartTime.current = null;
+    frameCountRef.current = 0;
+    latestDetections.current = { faceLandmarks: null, smiling: false, smileVal: 0 };
+  }, []);
 
   useEffect(() => {
     let timer: number;
@@ -72,6 +122,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   }, [onCapture]);
 
   const startCamera = async () => {
+    isDestroying.current = true;
+    await cleanupPipeline();
+    isDestroying.current = false;
+
     setHasError(null);
     setErrorDetails("");
     setStatus("INITIALIZING_OPTICS");
@@ -86,17 +140,26 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       return;
     }
 
+    if (!hasWebGLSupport()) {
+      setHasError("WEBGL_UNAVAILABLE");
+      setErrorDetails("WEBGL CONTEXT COULD NOT BE CREATED. ENABLE HARDWARE ACCELERATION IN BROWSER SETTINGS OR TRY A DIFFERENT DEVICE/GPU.");
+      setStatus("GPU_UNAVAILABLE");
+      onLog("ERROR: WEBGL_CONTEXT_UNAVAILABLE");
+      return;
+    }
+
     try {
       const hands = new Hands({
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
       });
-      // FIX 8: modelComplexity 0 is sufficient for a 2-finger gesture check and runs ~40% faster
       hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.75, minTrackingConfidence: 0.5, modelComplexity: 0 });
+      handsInstanceRef.current = hands;
 
       const faceMesh = new FaceMesh({
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
       });
       faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.5 });
+      faceMeshInstanceRef.current = faceMesh;
 
       hands.onResults((results: any) => {
         if (isDestroying.current) return;
@@ -142,7 +205,6 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         allSmiling.current = someoneSmiling;
       });
 
-      // Render loop: Always render camera feed at full FPS
       const renderFrame = () => {
         if (isDestroying.current) return;
 
@@ -227,12 +289,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           }
         }
         
-        // Continue rendering at next frame
-        requestAnimationFrame(renderFrame);
+        renderFrameIdRef.current = requestAnimationFrame(renderFrame);
       };
 
-      // Start the render loop
-      requestAnimationFrame(renderFrame);
+      renderFrameIdRef.current = requestAnimationFrame(renderFrame);
 
       const camera = new Camera(videoRef.current, {
         onFrame: async () => {
@@ -313,10 +373,9 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
     return () => {
       clearInterval(checkReady);
       isDestroying.current = true;
-      if (cameraInstance.current) cameraInstance.current.stop();
-      modelsReady.current = false;
+      void cleanupPipeline();
     };
-  }, []);
+  }, [cleanupPipeline]);
 
   useEffect(() => {
     const loop = setInterval(() => {
@@ -355,7 +414,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
   return (
     <div className="relative w-full h-full bg-black overflow-hidden cyber-clip-main neon-border">
       <video ref={videoRef} className="hidden" autoPlay playsInline muted />
-      <canvas ref={canvasRef} width="1280" height="720" className="absolute inset-0 w-full h-full object-cover z-10" />
+      <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} className="absolute inset-0 w-full h-full object-cover z-10" />
       
       {/* GESTURE HUD OVERLAY (Subtle visual cue on screen) */}
       {!hasError && !isLocked && isPeaceActive && (
