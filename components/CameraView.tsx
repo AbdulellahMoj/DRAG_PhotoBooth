@@ -252,12 +252,10 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           const frameImage = videoRef.current;
 
           try {
-            // Canonical MediaPipe flow: await sends per onFrame call.
-            // This prevents silent overlap/backpressure issues and ensures a bounded pipeline.
-            await Promise.all([
-              hands.send({ image: frameImage }),
-              faceMesh.send({ image: frameImage })
-            ]);
+            // Serialize model execution per frame.
+            // Running Hands + FaceMesh concurrently can trigger WASM aborts with the CDN builds.
+            await hands.send({ image: frameImage });
+            await faceMesh.send({ image: frameImage });
           } catch (err: any) {
             console.error("MediaPipe send error:", err);
             if (now - lastHealthLogAtRef.current > 1000) {
