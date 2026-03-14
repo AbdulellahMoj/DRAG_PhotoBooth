@@ -169,16 +169,7 @@ const App: React.FC = () => {
     <div className="h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--ui-primary-soft)]">
       <div className="h-full w-full p-[var(--shell-pad)] grid grid-rows-[auto_1fr] gap-[var(--shell-gap)]">
         <header className="nerv-panel px-[var(--panel-pad)] py-[var(--panel-pad)] grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 sm:gap-3 md:gap-4 items-center">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0 md:pr-4">
-            <img
-              src="DRAG_LOGO.png"
-              alt="DRAG"
-              className="w-8 h-8 sm:w-10 sm:h-10 object-contain opacity-90 shrink-0"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.opacity = '0.35';
-                addLog("LOGO_LINK_MISSING");
-              }}
-            />
+          <div className="flex items-center min-w-0 md:pr-4">
             <div className="flex flex-col gap-1 min-w-0">
               <h1 className="font-orbitron uppercase text-[14px] sm:text-[18px] tracking-[0.08em] sm:tracking-[0.16em] text-[var(--ui-primary-soft)] truncate">DRAG photo booth</h1>
               <p className="nerv-subtitle text-[10px] sm:text-[12px] tracking-[0.12em] sm:tracking-[0.2em] truncate">MODEL: FACEMESH_v0.4</p>
