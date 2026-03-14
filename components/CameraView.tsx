@@ -6,6 +6,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 const CANVAS_FILTER = "contrast(1.2) brightness(1.05) saturate(1.1) hue-rotate(280deg)";
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
+const DEBUG_MESH = true;
 
 interface CameraViewProps {
   onCapture: (url: string, confidence: number) => void;
@@ -42,6 +43,16 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
   const REQUIRED_HOLD_MS = 1400; 
   const COOLDOWN_SECONDS = 3;
+
+  const getDisplayStatus = () => {
+    if (isLocked) return "CAPTURED";
+    if (status === "SYNC_IN_PROGRESS") return "HOLD SMILE";
+    if (status === "MONITORING" || status === "SCANNING") return "SCANNING FOR TARGET";
+    if (status === "ARCHIVE_COMMITTED") return "CAPTURE READY";
+    if (status === "DEVICE_LOCKED") return "CAMERA BUSY";
+    if (status === "GPU_UNAVAILABLE") return "WEBGL UNAVAILABLE";
+    return status.replaceAll('_', ' ');
+  };
 
   const hasWebGLSupport = () => {
     const testCanvas = document.createElement('canvas');
@@ -143,8 +154,6 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       faceMesh.setOptions({ maxNumFaces: 5, refineLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.5 });
       faceMeshInstanceRef.current = faceMesh;
 
-      // latestDetections is declared at component level to satisfy React Rules of Hooks
-
       faceMesh.onResults((results: any) => {
         if (isDestroying.current) return;
         lastResultAtRef.current = Date.now();
@@ -171,6 +180,96 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
         allSmiling.current = groupReady;
       });
 
+      const renderVideoLayer = (ctx: CanvasRenderingContext2D, video: HTMLVideoElement, width: number, height: number) => {
+        ctx.save();
+        ctx.filter = CANVAS_FILTER;
+        ctx.translate(width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, width, height);
+        ctx.restore();
+      };
+
+      const renderFaceTargets = (
+        ctx: CanvasRenderingContext2D,
+        landmarksList: any[],
+        width: number,
+        height: number,
+        groupReady: boolean
+      ) => {
+        for (const landmarks of landmarksList) {
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          for (let i = 0; i < landmarks.length; i++) {
+            const x = (1 - landmarks[i].x) * width;
+            const y = landmarks[i].y * height;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+
+          const accent = groupReady ? "#39ff14" : "#bc6ff1";
+          const cLen = 24;
+          const off = 20;
+
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(minX - off, minY - off + cLen); ctx.lineTo(minX - off, minY - off); ctx.lineTo(minX - off + cLen, minY - off);
+          ctx.moveTo(maxX + off - cLen, minY - off); ctx.lineTo(maxX + off, minY - off); ctx.lineTo(maxX + off, minY - off + cLen);
+          ctx.moveTo(minX - off, maxY + off - cLen); ctx.lineTo(minX - off, maxY + off); ctx.lineTo(minX - off + cLen, maxY + off);
+          ctx.moveTo(maxX + off - cLen, maxY + off); ctx.lineTo(maxX + off, maxY + off); ctx.lineTo(maxX + off, maxY + off - cLen);
+          ctx.stroke();
+
+          if (DEBUG_MESH && FACEMESH_TESSELATION) {
+            ctx.save();
+            ctx.translate(width, 0);
+            ctx.scale(-1, 1);
+            drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, {
+              color: accent,
+              lineWidth: 0.7,
+              alpha: 0.55
+            });
+            ctx.restore();
+          }
+        }
+      };
+
+      const renderSmileIndicators = (ctx: CanvasRenderingContext2D, landmarksList: any[], width: number, height: number) => {
+        for (const landmarks of landmarksList) {
+          const mouthWidth = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
+          const faceWidth = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
+          const ratio = mouthWidth / (faceWidth || 1);
+          const smileVal = Math.min(100, Math.max(0, ((ratio - 0.42) / 0.16) * 100));
+
+          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+          for (let i = 0; i < landmarks.length; i++) {
+            const x = (1 - landmarks[i].x) * width;
+            const y = landmarks[i].y * height;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+
+          ctx.fillStyle = "rgba(2,0,5,0.82)";
+          ctx.fillRect(minX - 4, maxY + 10, 170, 20);
+          ctx.fillStyle = smileVal > 35 ? "#6dff5a" : "#d3a8ff";
+          ctx.font = "bold 14px Orbitron";
+          ctx.fillText(`SMILE INDEX ${Math.round(smileVal)}%`, minX + 3, maxY + 24);
+        }
+      };
+
+      const renderScannerFX = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+        ctx.strokeStyle = "rgba(188,111,241,0.15)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(width * 0.5, 0);
+        ctx.lineTo(width * 0.5, height);
+        ctx.moveTo(0, height * 0.5);
+        ctx.lineTo(width, height * 0.5);
+        ctx.stroke();
+      };
+
       const renderFrame = () => {
         if (isDestroying.current) return;
 
@@ -184,79 +283,17 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
           return;
         }
 
-        // P3 FIX: Use module-level constants instead of DOM property reads every frame.
         const width = CANVAS_W;
         const height = CANVAS_H;
-
-        // Reset shadow state once per frame before drawing anything.
-        // (P4): Doing it here — outside any save/restore — means it's in effect for
-        // the whole frame without needing to set it again inside the mesh block.
         canvasCtx.shadowBlur = 0;
+        renderVideoLayer(canvasCtx, videoRef.current, width, height);
 
-        canvasCtx.save();
-        canvasCtx.filter = CANVAS_FILTER;
-        canvasCtx.translate(width, 0);
-        canvasCtx.scale(-1, 1);
-        canvasCtx.drawImage(videoRef.current, 0, 0, width, height);
-        canvasCtx.restore();
-
-        // Overlay latest detections (updated async by MediaPipe)
         const { faceLandmarks, smiling } = latestDetections.current;
         if (faceLandmarks) {
-          for (const landmarks of faceLandmarks) {
-            const mouthWidth = Math.sqrt(Math.pow(landmarks[291].x - landmarks[61].x, 2) + Math.pow(landmarks[291].y - landmarks[61].y, 2));
-            const faceWidth = Math.sqrt(Math.pow(landmarks[454].x - landmarks[234].x, 2) + Math.pow(landmarks[454].y - landmarks[234].y, 2));
-            const ratio = mouthWidth / (faceWidth || 1);
-            const smileVal = Math.min(100, Math.max(0, ((ratio - 0.42) / 0.16) * 100));
-
-            // FIX 5: Replace Math.min(...spread) with a manual loop — avoids 468-item
-            //         argument list allocation and GC pressure on every render frame
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            for (let i = 0; i < landmarks.length; i++) {
-              const x = (1 - landmarks[i].x) * width;
-              const y = landmarks[i].y * height;
-              if (x < minX) minX = x;
-              if (x > maxX) maxX = x;
-              if (y < minY) minY = y;
-              if (y > maxY) maxY = y;
-            }
-
-            if (FACEMESH_TESSELATION) {
-              canvasCtx.save();
-              canvasCtx.translate(width, 0);
-              canvasCtx.scale(-1, 1);
-              drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {
-                color: smiling ? '#39ff14' : '#bc6ff1',
-                lineWidth: 0.6,
-                alpha: 0.6
-              });
-              canvasCtx.restore();
-            }
-
-            // P2 FIX: All 4 corner brackets batched into one path — 3 fewer canvas
-            //         state flushes (stroke() calls) per face per frame.
-            canvasCtx.strokeStyle = smiling ? "#39ff14" : "#bc6ff1";
-            canvasCtx.lineWidth = 2;
-            const cLen = 20;
-            const off = 30;
-            canvasCtx.beginPath();
-            // top-left
-            canvasCtx.moveTo(minX - off, minY - off + cLen); canvasCtx.lineTo(minX - off, minY - off); canvasCtx.lineTo(minX - off + cLen, minY - off);
-            // top-right
-            canvasCtx.moveTo(maxX + off - cLen, minY - off); canvasCtx.lineTo(maxX + off, minY - off); canvasCtx.lineTo(maxX + off, minY - off + cLen);
-            // bottom-left
-            canvasCtx.moveTo(minX - off, maxY + off - cLen); canvasCtx.lineTo(minX - off, maxY + off); canvasCtx.lineTo(minX - off + cLen, maxY + off);
-            // bottom-right
-            canvasCtx.moveTo(maxX + off - cLen, maxY + off); canvasCtx.lineTo(maxX + off, maxY + off); canvasCtx.lineTo(maxX + off, maxY + off - cLen);
-            canvasCtx.stroke();
-
-            canvasCtx.fillStyle = "rgba(0,0,0,0.6)";
-            canvasCtx.fillRect(minX - off, minY - off - 25, 120, 18);
-            canvasCtx.fillStyle = smiling ? "#39ff14" : "#bc6ff1";
-            canvasCtx.font = "bold 9px 'Orbitron'";
-            canvasCtx.fillText(`BIO: ${Math.round(smileVal)}%`, minX - off + 8, minY - off - 12);
-          }
+          renderFaceTargets(canvasCtx, faceLandmarks, width, height, smiling);
+          renderSmileIndicators(canvasCtx, faceLandmarks, width, height);
         }
+        renderScannerFX(canvasCtx, width, height);
         
         renderFrameIdRef.current = requestAnimationFrame(renderFrame);
       };
@@ -330,7 +367,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
 
       cameraInstance.current = camera;
       modelsReady.current = true;
-      setStatus("MONITORING");
+      setStatus("SCANNING");
       onLog("UPLINK_STABLE: OPTICS_ACTIVE");
     } catch (err: any) {
       setHasError("CORE_RUNTIME_ERROR");
@@ -396,15 +433,8 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} className="absolute inset-0 w-full h-full object-cover z-10" />
       
       {!hasError && !isLocked && isGroupBioActive && (
-        <div className="absolute top-20 left-6 z-40 pointer-events-none animate-fade-in">
-          <div className="flex flex-col gap-1 p-2 bg-purple-600/10 border-l-2 border-purple-500 backdrop-blur-sm">
-             <span className="text-[7px] font-black text-purple-400 tracking-[0.3em] uppercase animate-pulse">Group_Smile_Ready</span>
-             <div className="flex gap-1">
-                <div className="w-1 h-1 bg-purple-500 animate-bounce" />
-                <div className="w-1 h-1 bg-purple-500 animate-bounce [animation-delay:0.1s]" />
-                <div className="w-1 h-1 bg-purple-500 animate-bounce [animation-delay:0.2s]" />
-             </div>
-          </div>
+        <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-fade-in px-3 sm:px-4 py-1 border border-[var(--bio-green)] bg-black/70 max-w-[90%]">
+          <span className="font-orbitron text-[10px] sm:text-[12px] lg:text-[14px] tracking-[0.12em] sm:tracking-[0.2em] uppercase text-[var(--bio-green-soft)] whitespace-nowrap">GROUP BIOMETRIC READY</span>
         </div>
       )}
 
@@ -438,34 +468,34 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       {!hasError && <div className="absolute top-0 left-0 w-full h-[10px] bg-gradient-to-b from-transparent via-purple-400/40 to-transparent shadow-[0_0_20px_rgba(188,111,241,0.5)] animate-scan-line pointer-events-none z-30" />}
       
       {!hasError && (
-        <div className="absolute top-6 right-6 z-30 flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2 bg-black/50 px-3 py-1 border border-red-500/20 backdrop-blur-sm">
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-30 flex flex-col items-end gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-2 bg-black/50 px-2.5 sm:px-3 py-1 border border-red-500/20 backdrop-blur-sm">
             <div className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
-            <span className="text-red-500 font-black text-[8px] tracking-[0.3em]">REC_ACTIVE</span>
+            <span className="text-red-500 font-black text-[7px] sm:text-[8px] tracking-[0.2em] sm:tracking-[0.3em]">REC_ACTIVE</span>
           </div>
-          <div className="text-cyan-500 font-black text-[7px] tracking-[0.2em] bg-black/50 px-2 py-0.5 border-r border-cyan-500/30">ARRAY_01_FEED</div>
-        </div>
-      )}
-
-      {holdProgress > 0 && !isLocked && !hasError && (
-        <div className="absolute bottom-36 left-1/2 -translate-x-1/2 w-[280px] flex flex-col gap-1.5 z-50">
-          <div className="flex justify-between text-[8px] font-black text-white/50 tracking-[0.3em] uppercase">
-            <span className="animate-pulse">STABILIZING_SYNC</span>
-            <span className="text-purple-400">{Math.round(holdProgress)}%</span>
-          </div>
-          <div className="w-full h-1 bg-white/5 rounded-none border border-white/5 p-[0.5px]">
-            <div className="h-full bg-gradient-to-r from-purple-600 via-purple-300 to-cyan-400 shadow-[0_0_10px_#bc6ff1] transition-all duration-75" style={{ width: `${holdProgress}%` }} />
-          </div>
+          <div className="text-cyan-500 font-black text-[6px] sm:text-[7px] tracking-[0.12em] sm:tracking-[0.2em] bg-black/50 px-2 py-0.5 border-r border-cyan-500/30">ARRAY_01_FEED</div>
         </div>
       )}
 
       {!hasError && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-2 bg-black/90 border border-purple-500/20 cyber-clip-main flex items-center gap-10 backdrop-blur-2xl z-40 shadow-2xl">
-          <div className="flex flex-col items-center gap-1">
-            <div className={`w-2.5 h-2.5 rotate-45 transition-all duration-300 ${isGroupBioActive ? 'bg-green-500 shadow-[0_0_15px_#39ff14] scale-110' : 'bg-white/5 border border-white/20'}`} />
-            <span className={`text-[6px] font-black tracking-widest uppercase transition-colors ${isGroupBioActive ? 'text-green-400' : 'text-white/20'}`}>GROUP_BIO</span>
+        <div className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-[92vw] max-w-[560px] flex flex-col items-center gap-2">
+          <div className="w-full px-4 sm:px-6 py-2 sm:py-2.5 border border-[var(--grid-line)] bg-black/85">
+            <div className="font-orbitron text-[14px] sm:text-[20px] lg:text-[24px] leading-tight uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[var(--ui-primary-soft)] text-center">
+              {getDisplayStatus()}
+            </div>
           </div>
-          <div className="text-[10px] font-black tracking-[0.4em] text-white/80 italic uppercase text-center min-w-[120px]">{status}</div>
+
+          {holdProgress > 0 && !isLocked && (
+            <div className="w-full border border-white/10 bg-black/70 px-3 sm:px-4 py-2">
+              <div className="flex justify-between text-[7px] sm:text-[8px] font-black text-white/60 tracking-[0.18em] sm:tracking-[0.24em] uppercase mb-1">
+                <span className="animate-pulse">STABILIZING_SYNC</span>
+                <span className="text-purple-400">{Math.round(holdProgress)}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-white/5 border border-white/10 p-[1px]">
+                <div className="h-full bg-gradient-to-r from-purple-600 via-purple-300 to-cyan-400 shadow-[0_0_10px_#bc6ff1] transition-all duration-75" style={{ width: `${holdProgress}%` }} />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

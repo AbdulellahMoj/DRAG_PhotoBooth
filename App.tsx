@@ -7,6 +7,7 @@ const App: React.FC = () => {
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>(["SYSTEM_STABLE", "AUTH_LAYER_READY"]);
+  const [layoutMode, setLayoutMode] = useState<'landscape' | 'portrait'>('landscape');
 
   const selectedPhoto = useMemo(() => 
     photos.find(p => p.id === selectedPhotoId) || (photos.length > 0 ? photos[0] : null)
@@ -98,176 +99,161 @@ const App: React.FC = () => {
     uploadToShare(id, url);
   }, [uploadToShare]);
 
+  const renderCaptureExport = () => (
+    <div className="nerv-panel p-3 sm:p-4 flex flex-col gap-3 sm:gap-4 min-h-[280px]">
+      <h2 className="nerv-title text-[14px] sm:text-[16px] lg:text-[18px] tracking-[0.12em] sm:tracking-[0.2em]">CAPTURE EXPORT</h2>
+
+      <div className="w-full flex items-center justify-center">
+        <div className="w-full max-w-[220px] aspect-square border border-[var(--grid-line)] bg-black/40 flex items-center justify-center">
+          {selectedPhoto?.status === 'success' && selectedPhoto.shareUrl ? (
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(selectedPhoto.shareUrl)}`}
+              className="w-[88%] h-[88%] bg-white p-2"
+              alt="Capture Export QR"
+            />
+          ) : selectedPhoto?.status === 'uploading' ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-2 border-[var(--ui-primary-dim)] border-t-[var(--ui-primary)] rounded-full animate-spin" />
+              <span className="telemetry-text uppercase tracking-[0.2em] text-[var(--ui-primary)]">Syncing</span>
+            </div>
+          ) : (
+            <span className="telemetry-text uppercase tracking-[0.2em] text-[var(--ui-primary-dim)]">No Capture</span>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {selectedPhoto?.status === 'success' ? (
+          <>
+            <a
+              href={selectedPhoto.shareUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block w-full py-2 text-center uppercase tracking-[0.18em] sm:tracking-[0.25em] text-[10px] sm:text-[12px] border border-[var(--ui-primary)] text-[var(--ui-primary-soft)] hover:bg-[var(--ui-primary)]/15 transition-colors"
+            >
+              OPEN LINK
+            </a>
+            <button
+              onClick={() => window.open(selectedPhoto.shareUrl, '_blank', 'noopener,noreferrer')}
+              className="w-full py-2 uppercase tracking-[0.18em] sm:tracking-[0.25em] text-[10px] sm:text-[12px] border border-[var(--telemetry-cyan)] text-[var(--telemetry-cyan)] hover:bg-[var(--telemetry-cyan)]/10 transition-colors"
+            >
+              DOWNLOAD IMAGE
+            </button>
+            <div className="telemetry-text uppercase tracking-[0.14em] sm:tracking-[0.2em] text-[var(--ui-primary-dim)] text-[10px] sm:text-[12px] break-all">
+              SESSION ID: {selectedPhoto.id}
+            </div>
+          </>
+        ) : (
+          <div className="telemetry-text uppercase tracking-[0.14em] sm:tracking-[0.2em] text-[var(--ui-primary-dim)] text-[10px] sm:text-[12px]">
+            EXPORT STANDBY
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderTelemetry = () => (
+    <div className="nerv-panel p-3 sm:p-4 min-h-[280px] flex flex-col">
+      <h2 className="nerv-title text-[14px] sm:text-[16px] lg:text-[18px] tracking-[0.12em] sm:tracking-[0.2em] mb-2 sm:mb-3">SYSTEM TELEMETRY</h2>
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1">
+        {log.map((entry, i) => (
+          <div key={i} className={`telemetry-text text-[10px] sm:text-[12px] border-l pl-2 truncate ${i === 0 ? 'border-[var(--bio-green)] text-[var(--bio-green-soft)]' : 'border-[var(--grid-line)] text-[var(--ui-primary-soft)]/70'}`}>
+            {entry}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#010005] text-[#bc6ff1] font-mono overflow-hidden relative">
-      
-      {/* MINIMALIST STATUS HEADER */}
-      <header className="z-[80] px-4 py-1.5 flex justify-between items-center bg-black border-b border-purple-500/20 backdrop-blur-xl shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 flex items-center justify-center">
-             <img 
-               src="DRAG_LOGO.png" 
-               alt="DRAG" 
-               className="w-full h-full object-contain filter drop-shadow-[0_0_5px_#bc6ff1]" 
-               onError={(e) => {
-                 (e.target as HTMLImageElement).style.opacity = '0.3';
-                 addLog("LOGO_LINK_MISSING");
-               }}
-             />
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-[11px] font-black tracking-[0.2em] text-white leading-tight uppercase">DRAG_PHOTO_BOOTH</h1>
-            <p className="text-[7px] font-bold text-cyan-400/80 uppercase tracking-widest">UPLINK_STATION_ALPHA</p>
-          </div>
-        </div>
-        
-        <div className="flex gap-4">
-           <div className="flex flex-col items-end justify-center">
-             <span className="text-[6px] font-black text-purple-600/50 uppercase tracking-widest">Status</span>
-             <span className="text-[10px] font-black text-white leading-none">CONNECTED</span>
-           </div>
-           <div className="flex flex-col items-end justify-center border-l border-white/5 pl-4">
-             <span className="text-[6px] font-black text-purple-600/50 uppercase tracking-widest">Auth_Key</span>
-             <span className="text-[10px] font-black text-white leading-none">V_PEACE_02</span>
-           </div>
-        </div>
-      </header>
-
-      {/* MAIN LAYOUT */}
-      <main className="flex-1 flex overflow-hidden p-3 gap-3">
-        
-        {/* VIEWPORT (LEFT) */}
-        <div className="flex-[4] flex flex-col gap-3 min-w-0">
-          <div className="flex-1 relative group overflow-hidden cyber-clip-main border border-white/5 shadow-inner">
-            <CameraView onCapture={handleCapture} onLog={addLog} />
-            
-            {/* HUD OVERLAYS */}
-            <div className="absolute inset-0 pointer-events-none border border-white/5" />
-            <div className="absolute top-4 left-4 flex flex-col gap-1">
-               <div className="text-[8px] font-black text-purple-400 bg-black/40 px-2 py-0.5">X:12.8 // Y:07.2</div>
-               <div className="text-[8px] font-black text-white/20 px-2">SAT_SYNC: VALID</div>
+    <div className="h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--ui-primary-soft)]">
+      <div className="h-full w-full p-2 sm:p-3 grid grid-rows-[auto_1fr] gap-2 sm:gap-3">
+        <header className="nerv-panel px-3 sm:px-5 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <img
+              src="DRAG_LOGO.png"
+              alt="DRAG"
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain opacity-90 shrink-0"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.opacity = '0.35';
+                addLog("LOGO_LINK_MISSING");
+              }}
+            />
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1 className="font-orbitron uppercase text-[14px] sm:text-[18px] tracking-[0.08em] sm:tracking-[0.16em] text-[var(--ui-primary-soft)] truncate">DRAG photo booth</h1>
+              <p className="nerv-subtitle text-[10px] sm:text-[12px] tracking-[0.12em] sm:tracking-[0.2em] truncate">MODEL: FACEMESH_v0.4</p>
             </div>
           </div>
-          
-          {/* HISTORY TRAY */}
-          <div className="h-28 bg-black/40 border border-purple-500/10 p-3 flex items-center gap-3 relative overflow-hidden">
-            <div className="flex-shrink-0 flex flex-col items-center">
-              <span className="text-[6px] font-black text-purple-900 uppercase tracking-[1em] [writing-mode:vertical-lr] rotate-180">SESSION_ROLL</span>
-            </div>
-            <div className="flex-1 flex gap-3 overflow-x-auto scrollbar-hide py-1 items-center">
-              {photos.length === 0 ? (
-                <div className="w-full text-center text-[8px] opacity-10 tracking-[2em] font-black uppercase italic">Awaiting_Biometric_Trigger</div>
-              ) : (
-                photos.map(p => (
-                  <div 
-                    key={p.id} 
-                    onClick={() => setSelectedPhotoId(p.id)}
-                    className={`flex-shrink-0 w-36 h-20 bg-black cyber-clip-main border transition-all cursor-pointer overflow-hidden relative group/item ${selectedPhotoId === p.id ? 'border-purple-400 scale-105 shadow-[0_0_15px_rgba(188,111,241,0.3)] z-10' : 'border-white/5 opacity-30 hover:opacity-100'}`}
-                  >
-                    <img src={p.url} className="w-full h-full object-cover grayscale brightness-50 group-hover/item:grayscale-0 group-hover/item:brightness-100 transition-all" />
-                    {p.status === 'uploading' && <div className="absolute inset-0 bg-purple-600/20 animate-pulse" />}
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="text-left sm:text-right telemetry-text uppercase tracking-[0.12em] sm:tracking-[0.2em] text-[var(--telemetry-cyan)] text-[10px] sm:text-[12px]">
+            <div>SYSTEM LINK: ONLINE</div>
+            <div className="text-[var(--ui-primary-dim)]">PIPELINE: LIVE ANALYSIS</div>
           </div>
-        </div>
 
-        {/* DATA SIDEBAR (RIGHT) */}
-        <aside className="flex-1 flex flex-col gap-3 z-[90] min-w-[280px]">
-          {/* SHARE CARD */}
-          <div className="bg-black/80 border border-purple-500/20 p-5 flex flex-col gap-5 flex-[2] relative overflow-hidden flex items-center justify-center">
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-600/5 rounded-full blur-3xl" />
-            <div className="absolute top-3 left-3 text-[7px] font-black text-purple-900 tracking-widest uppercase italic">Distribution_Logic</div>
-            
-            <div className="w-full flex flex-col items-center gap-6">
-              {/* QR CONTAINER */}
-              <div className="relative w-full max-w-[180px] aspect-square flex items-center justify-center">
-                {/* Background Frame */}
-                <div className="absolute inset-0 border border-white/5 shadow-inner" />
-                <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-purple-500/50" />
-                <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-purple-500/50" />
+          <button
+            onClick={() => setLayoutMode((prev) => (prev === 'landscape' ? 'portrait' : 'landscape'))}
+            className="px-3 sm:px-4 py-2 border border-[var(--grid-line)] text-[var(--ui-primary-soft)] font-orbitron uppercase text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.18em] hover:bg-[var(--ui-primary)]/15 transition-colors"
+          >
+            {layoutMode === 'landscape' ? 'Vertical Mode' : 'Landscape Mode'}
+          </button>
+        </header>
 
-                {/* QR Display State Machine */}
-                {selectedPhoto ? (
-                  <>
-                    {selectedPhoto.status === 'success' && selectedPhoto.shareUrl ? (
-                      <div className="w-full h-full p-2 bg-white animate-[fade-in_0.5s_ease-out]">
-                        <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(selectedPhoto.shareUrl)}`} 
-                          className="w-full h-full grayscale brightness-75 hover:brightness-100 hover:grayscale-0 transition-all cursor-crosshair"
-                          alt="Asset QR"
-                        />
-                      </div>
-                    ) : selectedPhoto.status === 'uploading' ? (
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="w-12 h-12 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                        <span className="text-[8px] font-black text-purple-400 tracking-[0.4em] animate-pulse">SYNCING_TO_CLOUD</span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="text-red-500 text-xl font-black">!</div>
-                        <button 
-                          onClick={() => uploadToShare(selectedPhoto.id, selectedPhoto.url)}
-                          className="text-[8px] font-black text-red-500 border border-red-500/30 px-4 py-2 hover:bg-red-500 hover:text-white transition-all uppercase tracking-widest"
-                        >
-                          Retry_Uplink
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-2 opacity-10">
-                    <div className="w-10 h-10 border border-white/20 rotate-45" />
-                    <span className="text-[7px] font-black uppercase tracking-[0.5em]">No_Asset</span>
-                  </div>
-                )}
+        {layoutMode === 'landscape' ? (
+          <main className="min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-2 sm:gap-3 overflow-auto xl:overflow-hidden">
+            <section className="xl:col-span-8 min-h-0 grid grid-rows-[minmax(340px,1fr)_auto] xl:grid-rows-[1fr_auto] gap-2 sm:gap-3">
+              <div className="nerv-panel relative min-h-[340px] xl:min-h-0 overflow-hidden">
+                <div className="absolute top-2 sm:top-3 left-3 sm:left-4 z-20 nerv-subtitle text-[10px] sm:text-[12px]">CAMERA ANALYSIS</div>
+                <CameraView onCapture={handleCapture} onLog={addLog} />
               </div>
 
-              {/* ACTION AREA */}
-              <div className="w-full space-y-4">
-                {selectedPhoto?.status === 'success' ? (
-                  <div className="space-y-3">
-                    <a href={selectedPhoto.shareUrl} target="_blank" rel="noreferrer" className="block w-full py-3 bg-purple-600/10 hover:bg-purple-600 text-white text-[9px] font-black tracking-[0.5em] text-center uppercase border border-purple-500/30 transition-all shadow-2xl cyber-clip-main">
-                      OPEN_SECURE_GATE
-                    </a>
-                    <div className="flex justify-between items-center px-1">
-                       <span className="text-[6px] text-purple-500 font-black uppercase">Node: {selectedPhoto.id}</span>
-                       <span className="text-[6px] text-white/30 font-black uppercase tracking-tighter italic">Valid_2_Hours</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full py-4 border border-white/5 text-[8px] text-center opacity-10 uppercase font-black tracking-[0.8em] italic">Station_Idle</div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* SYSTEM DATA FEED */}
-          <div className="bg-black/60 border border-purple-500/10 p-4 flex flex-col gap-2 relative h-40">
-            <h4 className="text-[7px] font-black tracking-[0.3em] text-white/40 flex items-center gap-2">
-              <span className="w-1 h-1 bg-purple-500 rotate-45" />
-              SYSTEM_MONITOR
-            </h4>
-            <div className="flex-1 overflow-hidden space-y-1 font-mono text-[7px] text-purple-300/20">
-              {log.map((entry, i) => (
-                <div key={i} className={`flex gap-2 border-l border-white/5 pl-2 truncate ${i === 0 ? 'text-purple-100/40 border-purple-500' : ''}`}>
-                  {entry}
+              <div className="nerv-panel p-2 sm:p-3 flex items-center gap-2 sm:gap-3 min-h-[102px] sm:min-h-[118px]">
+                <div className="hidden md:block telemetry-text text-[var(--ui-primary-dim)] [writing-mode:vertical-lr] rotate-180 tracking-[0.2em] uppercase text-[10px]">
+                  SESSION ROLL
                 </div>
-              ))}
-            </div>
-          </div>
-        </aside>
-      </main>
+                <div className="flex-1 flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide py-1 items-center min-w-0">
+                  {photos.length === 0 ? (
+                    <div className="w-full text-center telemetry-text uppercase tracking-[0.16em] sm:tracking-[0.25em] text-[var(--ui-primary-dim)] text-[10px] sm:text-[12px]">
+                      Awaiting Biometric Trigger
+                    </div>
+                  ) : (
+                    photos.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedPhotoId(p.id)}
+                        className={`relative flex-shrink-0 w-28 h-16 sm:w-36 sm:h-20 overflow-hidden cursor-pointer border transition-all ${selectedPhotoId === p.id ? 'border-[var(--ui-primary)] shadow-[0_0_16px_rgba(188,111,241,0.45)]' : 'border-[var(--grid-line)] opacity-60 hover:opacity-100'}`}
+                      >
+                        <img src={p.url} className="w-full h-full object-cover grayscale brightness-75" />
+                        {p.status === 'uploading' && <div className="absolute inset-0 bg-[var(--ui-primary)]/20 animate-pulse" />}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </section>
 
-      <style>{`
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes fade-in {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
+            <aside className="xl:col-span-4 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 xl:grid-rows-[auto_1fr] gap-2 sm:gap-3">
+              {renderCaptureExport()}
+              {renderTelemetry()}
+            </aside>
+          </main>
+        ) : (
+          <main className="min-h-0 overflow-auto">
+            <div className="w-full max-w-[900px] mx-auto min-h-0 grid grid-rows-[minmax(420px,1fr)_auto_auto] gap-2 sm:gap-3">
+              <section className="nerv-panel relative overflow-hidden min-h-[420px]">
+                <div className="absolute top-2 sm:top-3 left-3 sm:left-4 z-20 nerv-subtitle text-[10px] sm:text-[12px]">CAMERA ANALYSIS</div>
+                <CameraView onCapture={handleCapture} onLog={addLog} />
+              </section>
+
+              <section>
+                {renderCaptureExport()}
+              </section>
+
+              <section className="min-h-[260px]">
+                {renderTelemetry()}
+              </section>
+            </div>
+          </main>
+        )}
+      </div>
     </div>
   );
 };
