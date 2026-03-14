@@ -434,7 +434,7 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
       
       {!hasError && !isLocked && isGroupBioActive && (
         <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 z-40 pointer-events-none animate-fade-in px-3 sm:px-4 py-1 border border-[var(--bio-green)] bg-black/70 max-w-[90%]">
-          <span className="font-orbitron text-[10px] sm:text-[12px] lg:text-[14px] tracking-[0.12em] sm:tracking-[0.2em] uppercase text-[var(--bio-green-soft)] whitespace-nowrap">GROUP BIOMETRIC READY</span>
+          <span className="font-orbitron text-[10px] sm:text-[12px] lg:text-[14px] tracking-[0.1em] sm:tracking-[0.16em] uppercase text-[var(--bio-green-soft)] text-center leading-snug block">GROUP BIOMETRIC READY</span>
         </div>
       )}
 
@@ -473,14 +473,14 @@ const CameraView: React.FC<CameraViewProps> = ({ onCapture, onLog }) => {
             <div className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
             <span className="text-red-500 font-black text-[7px] sm:text-[8px] tracking-[0.2em] sm:tracking-[0.3em]">REC_ACTIVE</span>
           </div>
-          <div className="text-cyan-500 font-black text-[6px] sm:text-[7px] tracking-[0.12em] sm:tracking-[0.2em] bg-black/50 px-2 py-0.5 border-r border-cyan-500/30">ARRAY_01_FEED</div>
+          <div className="hidden sm:block text-cyan-500 font-black text-[7px] tracking-[0.16em] bg-black/50 px-2 py-0.5 border-r border-cyan-500/30">ARRAY_01_FEED</div>
         </div>
       )}
 
       {!hasError && (
-        <div className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-[92vw] max-w-[560px] flex flex-col items-center gap-2">
+        <div className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-[92vw] max-w-[min(560px,calc(100vw-24px))] flex flex-col items-center gap-2">
           <div className="w-full px-4 sm:px-6 py-2 sm:py-2.5 border border-[var(--grid-line)] bg-black/85">
-            <div className="font-orbitron text-[14px] sm:text-[20px] lg:text-[24px] leading-tight uppercase tracking-[0.08em] sm:tracking-[0.1em] text-[var(--ui-primary-soft)] text-center">
+            <div className="font-orbitron text-[clamp(12px,2.3vw,24px)] leading-tight uppercase tracking-[0.06em] sm:tracking-[0.1em] text-[var(--ui-primary-soft)] text-center break-words">
               {getDisplayStatus()}
             </div>
           </div>

@@ -19,6 +19,35 @@
 
   --telemetry-cyan: #00f2ff;
   --grid-line: rgba(188, 111, 241, 0.15);
+
+  --shell-pad: 8px;
+  --shell-gap: 8px;
+  --panel-pad: 12px;
+  --camera-min-h: 300px;
+  --side-panel-min-h: 260px;
+  --content-max-w: 980px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --shell-pad: 12px;
+    --shell-gap: 12px;
+    --panel-pad: 14px;
+    --camera-min-h: 360px;
+    --side-panel-min-h: 280px;
+    --content-max-w: 1100px;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --shell-pad: 16px;
+    --shell-gap: 14px;
+    --panel-pad: 16px;
+    --camera-min-h: 460px;
+    --side-panel-min-h: 320px;
+    --content-max-w: 1280px;
+  }
 }
 
 body {

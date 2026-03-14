@@ -99,8 +99,8 @@ const App: React.FC = () => {
     uploadToShare(id, url);
   }, [uploadToShare]);
 
-  const renderCaptureExport = () => (
-    <div className="nerv-panel p-3 sm:p-4 flex flex-col gap-3 sm:gap-4 min-h-[280px]">
+  const renderCaptureExport = (className = "") => (
+    <div className={`nerv-panel p-[var(--panel-pad)] flex flex-col gap-3 sm:gap-4 min-h-[var(--side-panel-min-h)] ${className}`}>
       <h2 className="nerv-title text-[14px] sm:text-[16px] lg:text-[18px] tracking-[0.12em] sm:tracking-[0.2em]">CAPTURE EXPORT</h2>
 
       <div className="w-full flex items-center justify-center">
@@ -152,8 +152,8 @@ const App: React.FC = () => {
     </div>
   );
 
-  const renderTelemetry = () => (
-    <div className="nerv-panel p-3 sm:p-4 min-h-[280px] flex flex-col">
+  const renderTelemetry = (className = "") => (
+    <div className={`nerv-panel p-[var(--panel-pad)] min-h-[var(--side-panel-min-h)] flex flex-col ${className}`}>
       <h2 className="nerv-title text-[14px] sm:text-[16px] lg:text-[18px] tracking-[0.12em] sm:tracking-[0.2em] mb-2 sm:mb-3">SYSTEM TELEMETRY</h2>
       <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1">
         {log.map((entry, i) => (
@@ -167,9 +167,9 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--ui-primary-soft)]">
-      <div className="h-full w-full p-2 sm:p-3 grid grid-rows-[auto_1fr] gap-2 sm:gap-3">
-        <header className="nerv-panel px-3 sm:px-5 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+      <div className="h-full w-full p-[var(--shell-pad)] grid grid-rows-[auto_1fr] gap-[var(--shell-gap)]">
+        <header className="nerv-panel px-[var(--panel-pad)] py-[var(--panel-pad)] grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2 sm:gap-3 md:gap-4 items-center">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0 md:pr-4">
             <img
               src="DRAG_LOGO.png"
               alt="DRAG"
@@ -184,29 +184,29 @@ const App: React.FC = () => {
               <p className="nerv-subtitle text-[10px] sm:text-[12px] tracking-[0.12em] sm:tracking-[0.2em] truncate">MODEL: FACEMESH_v0.4</p>
             </div>
           </div>
-          <div className="text-left sm:text-right telemetry-text uppercase tracking-[0.12em] sm:tracking-[0.2em] text-[var(--telemetry-cyan)] text-[10px] sm:text-[12px]">
+          <div className="text-left md:text-right telemetry-text uppercase tracking-[0.12em] sm:tracking-[0.2em] text-[var(--telemetry-cyan)] text-[10px] sm:text-[12px] leading-relaxed md:justify-self-end">
             <div>SYSTEM LINK: ONLINE</div>
             <div className="text-[var(--ui-primary-dim)]">PIPELINE: LIVE ANALYSIS</div>
           </div>
 
           <button
             onClick={() => setLayoutMode((prev) => (prev === 'landscape' ? 'portrait' : 'landscape'))}
-            className="px-3 sm:px-4 py-2 border border-[var(--grid-line)] text-[var(--ui-primary-soft)] font-orbitron uppercase text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.18em] hover:bg-[var(--ui-primary)]/15 transition-colors"
+            className="w-full md:w-auto px-3 sm:px-4 py-2 border border-[var(--grid-line)] text-[var(--ui-primary-soft)] font-orbitron uppercase text-[10px] sm:text-[11px] tracking-[0.12em] sm:tracking-[0.18em] hover:bg-[var(--ui-primary)]/15 transition-colors md:justify-self-end"
           >
             {layoutMode === 'landscape' ? 'Vertical Mode' : 'Landscape Mode'}
           </button>
         </header>
 
         {layoutMode === 'landscape' ? (
-          <main className="min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-2 sm:gap-3 overflow-auto xl:overflow-hidden">
-            <section className="xl:col-span-8 min-h-0 grid grid-rows-[minmax(340px,1fr)_auto] xl:grid-rows-[1fr_auto] gap-2 sm:gap-3">
-              <div className="nerv-panel relative min-h-[340px] xl:min-h-0 overflow-hidden">
+          <main className="min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-[var(--shell-gap)] overflow-auto">
+            <section className="xl:col-span-8 min-h-0 grid grid-rows-[minmax(0,1fr)_auto] gap-[var(--shell-gap)]">
+              <div className="nerv-panel relative min-h-[var(--camera-min-h)] overflow-hidden">
                 <div className="absolute top-2 sm:top-3 left-3 sm:left-4 z-20 nerv-subtitle text-[10px] sm:text-[12px]">CAMERA ANALYSIS</div>
                 <CameraView onCapture={handleCapture} onLog={addLog} />
               </div>
 
-              <div className="nerv-panel p-2 sm:p-3 flex items-center gap-2 sm:gap-3 min-h-[102px] sm:min-h-[118px]">
-                <div className="hidden md:block telemetry-text text-[var(--ui-primary-dim)] [writing-mode:vertical-lr] rotate-180 tracking-[0.2em] uppercase text-[10px]">
+              <div className="nerv-panel p-[var(--panel-pad)] flex items-center gap-2 sm:gap-3 min-h-[100px] sm:min-h-[118px]">
+                <div className="hidden lg:block telemetry-text text-[var(--ui-primary-dim)] [writing-mode:vertical-lr] rotate-180 tracking-[0.2em] uppercase text-[10px]">
                   SESSION ROLL
                 </div>
                 <div className="flex-1 flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide py-1 items-center min-w-0">
@@ -230,24 +230,24 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            <aside className="xl:col-span-4 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 xl:grid-rows-[auto_1fr] gap-2 sm:gap-3">
-              {renderCaptureExport()}
-              {renderTelemetry()}
+            <aside className="xl:col-span-4 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 xl:grid-rows-[auto_1fr] gap-[var(--shell-gap)]">
+              {renderCaptureExport("h-full")}
+              {renderTelemetry("h-full")}
             </aside>
           </main>
         ) : (
           <main className="min-h-0 overflow-auto">
-            <div className="w-full max-w-[900px] mx-auto min-h-0 grid grid-rows-[minmax(420px,1fr)_auto_auto] gap-2 sm:gap-3">
-              <section className="nerv-panel relative overflow-hidden min-h-[420px]">
+            <div className="w-full max-w-[var(--content-max-w)] mx-auto min-h-0 grid grid-rows-[minmax(0,1fr)_auto_auto] gap-[var(--shell-gap)]">
+              <section className="nerv-panel relative overflow-hidden min-h-[max(48vh,var(--camera-min-h))]">
                 <div className="absolute top-2 sm:top-3 left-3 sm:left-4 z-20 nerv-subtitle text-[10px] sm:text-[12px]">CAMERA ANALYSIS</div>
                 <CameraView onCapture={handleCapture} onLog={addLog} />
               </section>
 
-              <section>
+              <section className="max-w-[680px] w-full justify-self-center">
                 {renderCaptureExport()}
               </section>
 
-              <section className="min-h-[260px]">
+              <section className="min-h-[var(--side-panel-min-h)] max-w-[820px] w-full justify-self-center">
                 {renderTelemetry()}
               </section>
             </div>
